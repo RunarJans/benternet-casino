@@ -19,7 +19,7 @@ int main() {
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    std::cout << "🎲 Custom Dice Service actief (max d" << max_sides << ")" << std::endl;
+    std::cout << "🎲 Custom Dice Service actief (max d" << max_sides << ", crashbestendig)" << std::endl;
 
     while (true) {
         zmq::message_t msg;
@@ -36,25 +36,31 @@ int main() {
             std::string name = match[1];
             std::string vraag = match[2];
 
-            // Check of vraag correct is: dX
             std::regex dice_pattern(R"(d(\d+))");
             std::smatch dice_match;
 
             if (std::regex_match(vraag, dice_match, dice_pattern)) {
-                int sides = std::stoi(dice_match[1]);
+                try {
+                    int sides = std::stoi(dice_match[1]);
 
-                if (sides < 2 || sides > max_sides) {
-                    std::string error = "custom_dice!>" + name + ">d" + std::to_string(sides) +
-                                        "=Invalid dice: must be between 2 and " + std::to_string(max_sides);
-                    push_socket.send(zmq::buffer(error), zmq::send_flags::none);
-                    std::cout << "[Fout] " << error << std::endl;
-                } else {
+                    if (sides < 2 || sides > max_sides) {
+                        std::string error = "custom_dice!>" + name + ">d" + std::to_string(sides) +
+                                            "=Invalid dice: must be between 2 and " + std::to_string(max_sides);
+                        push_socket.send(zmq::buffer(error), zmq::send_flags::none);
+                        std::cout << "[Fout] " << error << std::endl;
+                        continue;
+                    }
+
                     std::uniform_int_distribution<> distrib(1, sides);
                     int result = distrib(gen);
 
                     std::string response = "custom_dice!>" + name + ">d" + std::to_string(sides) + "=" + std::to_string(result);
                     push_socket.send(zmq::buffer(response), zmq::send_flags::none);
                     std::cout << "[Verstuurd] " << response << std::endl;
+                } catch (const std::exception& e) {
+                    std::string error = "custom_dice!>" + name + ">Invalid input: dice value too large or invalid";
+                    push_socket.send(zmq::buffer(error), zmq::send_flags::none);
+                    std::cout << "[Fout] Overflow of ongeldige waarde." << std::endl;
                 }
             } else {
                 std::string error = "custom_dice!>" + name + ">Invalid input: use d[number] (e.g. d20)";
