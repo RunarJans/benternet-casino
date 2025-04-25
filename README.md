@@ -1,6 +1,5 @@
 # 🎰 Benternet Casino Service — Project van Runar Jans
 
-![Casino Logo](./Resources/casino_banner.png)
 
 ## 🎯 Over het project
 
