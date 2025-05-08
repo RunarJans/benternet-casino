@@ -1,152 +1,94 @@
-# 🎰 Benternet Casino Service — Project van Runar Jans
+# Benternet Casino Service — Projectdocumentatie
 
+## Overzicht
 
-## 🎯 Over het project
+Deze applicatie is een modulair casinosysteem dat draait op het Benternet-netwerk. Via één universele client kunnen gebruikers verschillende kansspelen spelen, waaronder een dobbelsteen, custom dice (zoals d20), een paardenrace en een slotmachine. Daarbovenop zijn er ondersteunende diensten zoals logging, statistieken en een heartbeat die de status van het systeem bevestigt.
 
-Dit project is een modulaire en uitbreidbare casino-service gebouwd op het Benternet-netwerk. De service biedt meerdere minigames aan zoals:
+Alle communicatie verloopt over Benternet volgens het topic-pattern van ZeroMQ.
 
-- 🎲 Dobbelsteen
-- 🧠 Custom Dice (zoals d4, d20, d1000, …)
-- 🏇 Paardenrace
-- 🎰 Slotmachine
+## Functionaliteiten
 
-Naast spelinteractie zijn er ook ondersteunende modules:
+- Dobbelsteen: eenvoudige worp van 1 tot 6
+- Custom Dice: bijvoorbeeld d4, d20, d1000, met validatie
+- Paardenrace: kies een paard tussen 1–5, één wint willekeurig
+- Slotmachine: drie willekeurige symbolen
+- Statistieken: toont hoe vaak een speler 6 gooit, winpercentages, ranglijsten
+- Loggen: houdt bij wat elke speler doet
+- Heartbeat: publiceert periodiek dat het systeem actief is
 
-- 💓 Heartbeat-service (alive-check)
-- 🪵 Logservice (voor monitoring en debugging)
-- 📈 Stats-service (voor gebruikersstatistieken en winstpercentages)
+## Communicatiestructuur
 
-De gebruiker heeft slechts één universele client nodig, die met één commando elk spel kan aanspreken via de centrale CasinoService.
+Elke actie van de gebruiker verloopt via een PUSH-opdracht van de client naar de CasinoService, die het afhandelt of doorstuurt naar een subservice. Antwoorden gaan via PUB-topics terug naar de gebruiker.
 
-## 💡 Communicatiestructuur
+## Voorbeeldberichten
 
-Client → CasinoService → Subservices  
-Subservices → CasinoService → Client
+| Actie              | Client naar server (push)                         | Server naar client (pub)                         |
+|--------------------|--------------------------------------------------|--------------------------------------------------|
+| Dobbelsteen        | casino?>Runar Jans>spel=dobbelsteen              | casino!>Runar Jans>result=dobbelsteen=5          |
+| Custom dice (d20)  | casino?>Runar Jans>spel=custom_dice>d20          | casino!>Runar Jans>result=custom_dice>d20=17     |
+| Paardenrace (3)    | casino?>Bart>spel=paarden>3                      | casino!>Bart>result=paarden>winner=2>you=lost    |
+| Slotmachine        | casino?>Lisa>spel=slot                           | casino!>Lisa>result=slot=🍋🍒🍋                    |
+| Statistieken       | casino?>Runar Jans>stats                         | casino!>Runar Jans>stats=6x(30%) rank=1          |
 
-Alle communicatie gebeurt volgens het Benternet-patroon:
-
-- Aansturen via: topic?>
-- Antwoorden via: topic!>
-
-## 🕹️ Spellen en syntax
-
-Gebruik steeds:
-
-```bash
-client.exe casino "Jouw Naam" "spel=<spelcode>"
-```
-
-Voorbeelden:
-
-- 🎲 Custom Dice: `client.exe casino "Runar Jans" "spel=custom_dice>d20"`
-- 🎲 Dobbelsteen: `client.exe casino "Runar Jans" "spel=dobbelsteen"`
-- 🏇 Paardenrace: `client.exe casino "Runar Jans" "spel=paarden"`
-- 🎰 Slotmachine: `client.exe casino "Runar Jans" "spel=slot"`
-- 📊 Bekijk stats: `client.exe casino "Runar Jans" "stats"`
-
-## 🧠 Logica flowchart (vereenvoudigd)
+## Flowchart — Overzicht communicatie
 
 ```mermaid
 flowchart TD
-    Client --> CasinoService
-    CasinoService --> GameSelector{Welk spel?}
-    GameSelector --> D1[custom_dice] --> Forward1
-    GameSelector --> D2[dobbelsteen] --> Forward2
-    GameSelector --> D3[slotmachine] --> Forward3
-    GameSelector --> D4[paardenrace] --> Forward4
-    Forward1 --> Sub1[custom_dice_service]
-    Forward2 --> Sub2[dobbelsteen_service]
-    Forward3 --> Sub3[slot_service]
-    Forward4 --> Sub4[paarden_service]
-    Sub1 --> CasinoService
-    Sub2 --> CasinoService
-    Sub3 --> CasinoService
-    Sub4 --> CasinoService
-    CasinoService --> Client
-    CasinoService --> StatsService
+    Client -->|casino?>spel=...| CasinoService
+    CasinoService -->|custom_dice?>...| CustomDice
+    CustomDice -->|custom_dice!>...| CasinoService
+    CasinoService -->|casino!>result=...| Client
+
+    CasinoService -->|dobbelsteen?>...| Dobbelsteen
+    Dobbelsteen -->|dobbelsteen!>...| CasinoService
+
+    CasinoService -->|paarden?>...| Paardenrace
+    Paardenrace -->|paarden!>...| CasinoService
+
+    CasinoService -->|slot?>...| Slotmachine
+    Slotmachine -->|slot!>...| CasinoService
+
+    CasinoService -->|casino!>log=...| LogService
+    CasinoService -->|casino!>heartbeat=alive| Heartbeat
+    CasinoService -->|casino?>naam>stats| StatsService
+    StatsService -->|casino!>naam>stats=...| CasinoService
 ```
 
-## 📬 Communication Sequence Diagram
+## Gebruik
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant CasinoService
-    participant CustomDice
-    participant LogService
-    participant StatsService
-    participant Heartbeat
-
-    Client->>CasinoService: casino?>Runar Jans>spel=custom_dice>d20
-    CasinoService->>LogService: casino!>log=Runar Jans speelt custom_dice>d20
-    CasinoService->>StatsService: casino!>log=custom_dice>Runar Jans>d20=6
-    CasinoService->>CustomDice: custom_dice?>Runar Jans>d20
-    CustomDice-->>CasinoService: custom_dice!>Runar Jans>d20=6
-    CasinoService-->>Client: casino!>Runar Jans>result=custom_dice>d20=6
-
-    Client->>CasinoService: casino?>Runar Jans>stats
-    CasinoService->>StatsService: casino?>Runar Jans>stats
-    StatsService-->>CasinoService: casino!>Runar Jans>stats=...
-
-    Heartbeat-->>Benternet: casino!>heartbeat=alive
-```
-
-## ⚙️ Getting Started
-
-1. Clone de repo
+1. Start alle services in aparte terminals:
 
 ```bash
-git clone https://github.com/RunarJans/BenternetCasino.git
-cd BenternetCasino
-```
-
-2. Compileer de services:
-
-```bash
-g++ casino_service.cpp -o casino.exe -lzmq
-g++ casino_log_service.cpp -o casino_log.exe -lzmq
-g++ casino_heartbeat_service.cpp -o casino_heartbeat.exe -lzmq
-g++ casino_stats_service.cpp -o casino_stats.exe -lzmq
-g++ custom_dice_service.cpp -o custom_dice_service.exe -lzmq
-g++ dobbelsteen_service.cpp -o dobbelsteen_service.exe -lzmq
-g++ paarden_service.cpp -o paarden_service.exe -lzmq
-g++ slot_service.cpp -o slot_service.exe -lzmq
-```
-
-3. Start de services:
-
-```bash
-./casino.exe
+./casino_service.exe
 ./custom_dice_service.exe
 ./dobbelsteen_service.exe
 ./paarden_service.exe
 ./slot_service.exe
-./casino_log.exe
-./casino_heartbeat.exe
-./casino_stats.exe
+./casino_stats_service.exe
+./casino_log_service.exe
+./casino_heartbeat_service.exe
 ```
 
-4. Start je client (of geef deze aan je gebruikers)
+2. Gebruik de client:
 
 ```bash
-client.exe casino "Naam" "spel=custom_dice>d6"
-client.exe casino "Naam" "stats"
+client.exe casino "Runar Jans" "spel=custom_dice>d6"
+client.exe casino "Runar Jans" "spel=paarden>2"
+client.exe casino "Runar Jans" "spel=slot"
+client.exe casino "Runar Jans" "stats"
 ```
 
-## 📈 Beoordelingspunten & status
+## Integratie met Benternet
 
-| Criterium       | Score | Opmerkingen |
-|-----------------|-------|-------------|
-| ✅ C++ & OOP     | 5/5   | Modulaire structuur, moderne technieken, foutafhandeling, duidelijke inputvalidatie |
-| ✅ Benternet     | 1/1   | PUSH, PUB/SUB, forwarding, correcte topicstructuur |
-| ✅ Autonomie     | 5/5   | Elke gebruiker heeft unieke communicatiekanalen + statetracking |
-| ✅ Diensten      | 4/4   | Dobbelsteen, custom_dice, paardenrace, slotmachine, stats, foutmeldingen |
-| ✅ Reacties      | 4/4   | Logservice, heartbeat, stats queries, naam-specifieke replies |
-| ✅ GitHub        | 1/1   | Duidelijke README, projectstructuur, klaar voor CI/CD |
+Deze service gebruikt het Benternet-systeem correct en volledig:
+- Standaard PUSH/PUB communicatie
+- Herbruikbare subdiensten
+- Subservices draaien parallel en reageren op standaard topics
+- Logging en statistieken draaien onafhankelijk van clients
 
-🎯 Totaalscore: 20/20
+De dienst kan eenvoudig uitgebreid worden met nieuwe spellen en blijft compatibel met dezelfde client.
 
-## 👨‍💻 Auteur
+## Auteur
 
-- Runar Jans  
+- Runar Jans
 - GitHub: https://github.com/RunarJans
