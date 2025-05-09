@@ -54,6 +54,67 @@ flowchart TD
     StatsService -->|casino!>naam>stats=...| CasinoService
 ```
 
+## Communication Sequence Diagram
+
+  
+
+```mermaid
+
+sequenceDiagram
+
+participant Client
+
+participant CasinoService
+
+participant Dice
+
+participant CustomDice
+
+participant Paardenrace
+
+participant Slot
+
+participant StatsService
+
+participant LogService
+
+participant Heartbeat
+
+  
+
+Client->>CasinoService: casino?>Runar Jans>spel=custom_dice>d20
+
+CasinoService->>CustomDice: custom_dice?>Runar Jans>d20
+
+CustomDice-->>CasinoService: custom_dice!>Runar Jans>d20=12
+
+CasinoService-->>Client: casino!>Runar Jans>result=custom_dice>d20=12
+
+CasinoService-->>LogService: log>>custom_dice>Runar Jans>d20=12
+
+CasinoService-->>StatsService: stats>>custom_dice>Runar Jans>d20=12
+
+  
+
+Client->>CasinoService: casino?>Runar Jans>stats
+
+CasinoService->>StatsService: stats?>Runar Jans>
+
+StatsService-->>CasinoService: casino!>Runar Jans>stats=6x(30%) rank=1
+
+CasinoService-->>Client: casino!>Runar Jans>stats=6x(30%) rank=1
+
+  
+
+Note over Heartbeat: publiceert casino!>heartbeat=alive via PUB
+
+```
+
+  
+
+
+
+
 ## Gebruik
 
 1. Start alle services in aparte terminals:
