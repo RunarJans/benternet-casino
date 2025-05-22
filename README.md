@@ -119,6 +119,13 @@ Note over Heartbeat: publiceert casino!>heartbeat=alive via PUB
 
 1. Start alle services in aparte terminals:
 
+Momenteel via het start alles bat-bestand !
+
+
+
+
+
+
 ```bash
 ./casino_service.exe
 ./custom_dice_service.exe
