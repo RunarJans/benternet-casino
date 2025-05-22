@@ -1,77 +1,68 @@
-#include <string>
 #include <iostream>
+#include <string>
+#include <thread>
+#include <chrono>
 #include <random>
-#include <regex>
 #include <zmq.hpp>
 
+void heartbeatLoop(zmq::socket_t& push_socket) {
+    while (true) {
+        std::string heartbeat = "heartbeat?>custom_dice";
+        push_socket.send(zmq::buffer(heartbeat), zmq::send_flags::none);
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+    }
+}
+
 int main() {
-    const int max_sides = 10000;
-
     zmq::context_t context(1);
-
     zmq::socket_t sub_socket(context, zmq::socket_type::sub);
-    sub_socket.connect("tcp://benternet.pxl-ea-ict.be:24042");
-    sub_socket.setsockopt(ZMQ_SUBSCRIBE, "custom_dice?>", 13);
-
     zmq::socket_t push_socket(context, zmq::socket_type::push);
+
+    sub_socket.connect("tcp://benternet.pxl-ea-ict.be:24042");
     push_socket.connect("tcp://benternet.pxl-ea-ict.be:24041");
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    sub_socket.setsockopt(ZMQ_SUBSCRIBE, "custom_dice?>", 13);
 
-    std::cout << "🎲 Custom Dice Service actief (max d" << max_sides << ", crashbestendig)" << std::endl;
+    std::thread heartbeat(heartbeatLoop, std::ref(push_socket));
+
+    std::cout << "🎲 Custom Dice Service actief..." << std::endl;
 
     while (true) {
         zmq::message_t msg;
         sub_socket.recv(msg, zmq::recv_flags::none);
-        std::string input = msg.to_string();
+        std::string received = msg.to_string();
 
-        std::cout << "[Ontvangen] " << input << std::endl;
+        std::string payload = received.substr(13); // na custom_dice?>
+        size_t sep = payload.find('>');
+        if (sep == std::string::npos) continue;
 
-        // Regex: custom_dice?>(naam)>(vraag)
-        std::regex pattern(R"(custom_dice\?\>([^>]+)>(.+))");
-        std::smatch match;
+        std::string naam = payload.substr(0, sep);
+        std::string sidesStr = payload.substr(sep + 1);
 
-        if (std::regex_match(input, match, pattern)) {
-            std::string name = match[1];
-            std::string vraag = match[2];
-
-            std::regex dice_pattern(R"(d(\d+))");
-            std::smatch dice_match;
-
-            if (std::regex_match(vraag, dice_match, dice_pattern)) {
-                try {
-                    int sides = std::stoi(dice_match[1]);
-
-                    if (sides < 2 || sides > max_sides) {
-                        std::string error = "custom_dice!>" + name + ">d" + std::to_string(sides) +
-                                            "=Invalid dice: must be between 2 and " + std::to_string(max_sides);
-                        push_socket.send(zmq::buffer(error), zmq::send_flags::none);
-                        std::cout << "[Fout] " << error << std::endl;
-                        continue;
-                    }
-
-                    std::uniform_int_distribution<> distrib(1, sides);
-                    int result = distrib(gen);
-
-                    std::string response = "custom_dice!>" + name + ">d" + std::to_string(sides) + "=" + std::to_string(result);
-                    push_socket.send(zmq::buffer(response), zmq::send_flags::none);
-                    std::cout << "[Verstuurd] " << response << std::endl;
-                } catch (const std::exception& e) {
-                    std::string error = "custom_dice!>" + name + ">Invalid input: dice value too large or invalid";
-                    push_socket.send(zmq::buffer(error), zmq::send_flags::none);
-                    std::cout << "[Fout] Overflow of ongeldige waarde." << std::endl;
-                }
-            } else {
-                std::string error = "custom_dice!>" + name + ">Invalid input: use d[number] (e.g. d20)";
-                push_socket.send(zmq::buffer(error), zmq::send_flags::none);
-                std::cout << "[Fout] Geen geldig dX-formaat." << std::endl;
-            }
-
-        } else {
-            std::cout << "[Ongeldig berichtformaat – genegeerd]" << std::endl;
+        if (sidesStr[0] != 'd' || sidesStr.size() < 2) {
+            std::string fout = "custom_dice!>" + naam + ">Invalid format";
+            push_socket.send(zmq::buffer(fout), zmq::send_flags::none);
+            continue;
         }
+
+        int sides = std::stoi(sidesStr.substr(1));
+        if (sides < 1 || sides > 1000000) {
+            std::string fout = "custom_dice!>" + naam + ">Invalid dice size";
+            push_socket.send(zmq::buffer(fout), zmq::send_flags::none);
+            continue;
+        }
+
+        int result = std::rand() % sides + 1;
+        std::string reply = "custom_dice!>" + naam + ">" + sidesStr + "=" + std::to_string(result);
+        push_socket.send(zmq::buffer(reply), zmq::send_flags::none);
+
+        // 🔍 Logging toevoegen
+        std::string logbericht = "log!>custom_dice>" + naam + ">gooide " + sidesStr + " = " + std::to_string(result);
+        push_socket.send(zmq::buffer(logbericht), zmq::send_flags::none);
+
+        std::cout << "[LOG] " << logbericht << std::endl;
     }
 
+    heartbeat.join();
     return 0;
 }

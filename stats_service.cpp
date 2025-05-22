@@ -1,101 +1,53 @@
-#include <string>
 #include <iostream>
+#include <string>
 #include <unordered_map>
-#include <vector>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <zmq.hpp>
 
+// Struct om statistieken per speler bij te houden
 struct Statistiek {
+    int juist = 0;
     int totaal = 0;
-    int zessen = 0;
-    std::vector<std::string> timestamps;
 };
 
 int main() {
-    zmq::context_t context(1);
+    zmq::context_t context{1};
+    zmq::socket_t sub_socket{context, zmq::socket_type::sub};
+    sub_socket.connect("tcp://benternet.pxl-ea-ict.be:24042");
 
-    zmq::socket_t sub_dobbel(context, zmq::socket_type::sub);
-    zmq::socket_t sub_vraag(context, zmq::socket_type::sub);
-    zmq::socket_t push_socket(context, zmq::socket_type::push);
+    const std::string filter = "paardenrace!>";
+    sub_socket.setsockopt(ZMQ_SUBSCRIBE, filter.c_str(), filter.size());
 
-    sub_dobbel.connect("tcp://benternet.pxl-ea-ict.be:24042");
-    sub_vraag.connect("tcp://benternet.pxl-ea-ict.be:24042");
-    push_socket.connect("tcp://benternet.pxl-ea-ict.be:24041");
+    std::unordered_map<std::string, Statistiek> stats;
 
-    sub_dobbel.setsockopt(ZMQ_SUBSCRIBE, "dobbelsteen!>", 13);
-    sub_vraag.setsockopt(ZMQ_SUBSCRIBE, "stats?>", 7);
-
-    std::unordered_map<std::string, Statistiek> database;
-
-    std::cout << "📊 Stats-service actief..." << std::endl;
+    std::cout << "✅ Stats-service actief..." << std::endl;
 
     while (true) {
-        zmq::pollitem_t items[] = {
-            { static_cast<void*>(sub_dobbel), 0, ZMQ_POLLIN, 0 },
-            { static_cast<void*>(sub_vraag), 0, ZMQ_POLLIN, 0 }
-        };
+        zmq::message_t msg;
+        sub_socket.recv(msg, zmq::recv_flags::none);
+        std::string data = msg.to_string();
 
-        zmq::poll(items, 2, -1);
+        // Verwacht formaat: paardenrace!>Runar>Winnaar: 2 (DustRunner) - Je had juist!
+        size_t start = data.find("!>") + 2;
+        size_t midden = data.find(">", start);
+        std::string naam = data.substr(start, midden - start);
+        std::string inhoud = data.substr(midden + 1);
 
-        if (items[0].revents & ZMQ_POLLIN) {
-            zmq::message_t msg;
-            sub_dobbel.recv(msg, zmq::recv_flags::none);
-            std::string result = msg.to_string();
-
-            std::string payload = result.substr(13);
-size_t pos1 = payload.find(">");
-size_t pos2 = payload.rfind(">");
-
-if (pos1 == std::string::npos || pos2 == std::string::npos || pos1 == pos2) {
-    std::cerr << "[⚠️  FOUT] Ongeldig dobbelsteenbericht (2 delimiters verwacht): " << payload << std::endl;
-    continue;
-}
-
-std::string naam = payload.substr(0, pos1);
-std::string worp_str = payload.substr(pos2 + 1);
-
-
-            int worp = 0;
-            try {
-                worp = std::stoi(worp_str);
-            } catch (...) {
-                std::cerr << "[⚠️  FOUT] Kan worp niet parsen uit: " << worp_str << std::endl;
-                continue;
-            }
-
-            database[naam].totaal++;
-            if (worp == 6) {
-                database[naam].zessen++;
-                char buf[100];
-                std::time_t now = std::time(nullptr);
-                std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
-                database[naam].timestamps.push_back(buf);
-            }
-
-            std::cout << "[📝 LOG] " << naam << " gooide " << worp << std::endl;
+        if (inhoud.find("Je had juist") != std::string::npos) {
+            stats[naam].juist++;
+            stats[naam].totaal++;
+        } else if (inhoud.find("Je had fout") != std::string::npos) {
+            stats[naam].totaal++;
+        } else {
+            continue;
         }
 
-        if (items[1].revents & ZMQ_POLLIN) {
-            zmq::message_t msg;
-            sub_vraag.recv(msg, zmq::recv_flags::none);
-            std::string verzoek = msg.to_string();
-            std::string naam = verzoek.substr(7, verzoek.length() - 8);
-
-            std::ostringstream antwoord;
-            if (database.find(naam) == database.end()) {
-                antwoord << "stats!>" << naam << ">Nog geen worpen.";
-            } else {
-                auto& s = database[naam];
-                double perc = (s.totaal > 0) ? (100.0 * s.zessen / s.totaal) : 0.0;
-                antwoord << "stats!>" << naam << ">"
-                         << std::fixed << std::setprecision(1)
-                         << perc << "% (" << s.zessen << "/" << s.totaal << " keer 6)";
-            }
-
-            push_socket.send(zmq::buffer(antwoord.str()), zmq::send_flags::none);
-            std::cout << "[📤 ANTWOORD] " << antwoord.str() << std::endl;
+        // Print statistieken
+        std::cout << "\n📊 Statistieken na gok van " << naam << ":\n";
+        for (const auto& [speler, stat] : stats) {
+            double ratio = stat.totaal == 0 ? 0 : (double)stat.juist / stat.totaal * 100;
+            std::cout << "- " << speler << ": " << stat.juist << " juist op " << stat.totaal << " gokken (" << ratio << "% winrate)\n";
         }
     }
+
+    return 0;
 }
