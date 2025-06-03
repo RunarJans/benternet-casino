@@ -1,2 +1,6 @@
 log!>custom_dice>QtGUI>gooide d5555 = 42
 log!>custom_dice>QtGUI>gooide d5555 = 1803
+log!>custom_dice>QtGUI>gooide d58 = 42
+log!>custom_dice>QtGUI>gooide d5 = 2
+log!>custom_dice>QtGUI>gooide d52 = 42
+log!>custom_dice>QtGUI>gooide d5 = 2

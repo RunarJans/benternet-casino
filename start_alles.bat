@@ -6,7 +6,7 @@ start "" "logging_service.exe"
 start "" "stats_service.exe"
 start "" "weer_time_writer.exe"
 
-start "" "weer_service.exe"
+
 start "" "custom_dice_service.exe"
 start "" "paardenrace_service.exe"
 
