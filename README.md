@@ -120,7 +120,7 @@ Note over Heartbeat: publiceert casino!>heartbeat=alive via PUB
 1. Start alle services in aparte terminals:
 
 Momenteel via het start alles bat-bestand !
-
+Zmq libraries nodig voor python en cpp
 
 
 
